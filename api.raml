@@ -1,0 +1,204 @@
+#%RAML 0.8
+---
+title: Marcura Mobile PortCall Management
+mediaType: application/json
+version: 0.1
+#baseUri: https://mobl.da-desk.com/{version}
+baseUri: http://mocksvc.mulesoft.com/mocks/2cee13e2-3932-4925-82df-be0b894a643f/mocks/7ecd301b-d907-4437-9b84-e56a0af84dc3/{version}
+#protocols: [HTTPS]
+
+schemas:
+  - authenticationRequestSchema: !include schemas/authentication-request.schema.json
+  - authenticationSuccessSchema: !include schemas/authentication-success.schema.json
+  - defaultSchema: !include schemas/default-message.schema.json
+  - errorSchema: !include schemas/default-message.schema.json
+  - tokenStatusSchema: !include schemas/token-status.schema.json 
+  - forgotPasswordSchema: !include schemas/forgot-password.schema.json
+  - passwordResetSchema: !include schemas/password-reset.schema.json
+  - currenciesSchema: !include schemas/currencies.schema.json
+  - currencyExchangeSchema: !include schemas/currency-exchange.schema.json
+  - currenciesExchangeSchema: !include schemas/currencies-exchange.schema.json
+  - currenciesSchema: !include schemas/currencies.schema.json
+  - invoiceSchema: !include schemas/invoice.schema.json
+  - invoicesSchema: !include schemas/invoices.schema.json
+  - approvalSchema: !include schemas/approval.schema.json
+  - paymentRecordSchema: !include schemas/payment-record.schema.json
+  
+traits:
+  - traced: !include traits/traced.raml
+  - secured: !include traits/secured.raml
+  - defaultErrors: !include traits/default-errors.raml
+  - securityErrors: !include traits/authorisation-errors.raml
+
+/users/{userId}:
+  /sessions:
+    post:
+      is: [traced, defaultErrors, securityErrors]
+      description: Authenticate and start a session
+      body:
+        schema: authenticationRequestSchema
+        example: !include examples/authentication-request.example.json
+      responses: 
+        200:
+          body:
+            schema: authenticationSuccessSchema
+            example: !include examples/authentication-success.example.json
+    /{token}:
+      uriParameters:
+        token:
+          description: Authentication Token
+      get:
+        is: [secured, traced, defaultErrors, securityErrors]
+        description: Validate the given session token (path/uri parameter)
+        responses: 
+          200:
+            body:
+              schema: defaultSchema
+              example: !include examples/token-validation-success.example.json
+          404:
+            body:
+              schema: errorSchema
+              example: !include examples/token-validation-failure.example.json
+      delete:
+        is: [secured, traced, defaultErrors, securityErrors]
+        description: Terminate the authenticated session -- log out
+        responses: 
+          200:
+            body:
+              schema: defaultSchema
+              example: !include examples/token-delete-success.example.json
+          404:
+            body:
+              schema: errorSchema
+              example: !include examples/token-delete-failure.example.json
+  /passwordRequest:
+    post:
+      is: [traced, defaultErrors]
+      description: Send new password request by e-mail
+      body: 
+        schema: forgotPasswordSchema
+        example: !include examples/forgot-password.example.json
+      responses: 
+        200:
+          body: 
+            schema: passwordResetSchema
+            example: !include examples/password-reset.example.json
+  /invoices:
+    get:
+      is: [secured, traced, defaultErrors, securityErrors]
+      queryParameters: 
+        ownershipFilter:
+          description: A filter allowing the caller to limit the size of the result set. 
+          type: string
+          repeat: true
+          enum: ["forMyApproval","forApprovalMyOwnership","approvedMyOwnership","rejectedMyOwnership","approvedByMe","rejectedByMe"]
+          example: forMyApproval
+          required : false
+        typeFilter:
+          description: A filter allowing the caller to limit the size fo the result set. 
+          type: string
+          enum: ["PDA", "FDA", "APR", "VI", "SDA"]
+          example: PDA
+          required : false
+      responses: 
+        200:
+          body:
+            schema: invoicesSchema
+            example: !include examples/invoices.example.json
+    /{invoiceId}:
+      uriParameters:
+        invoiceId:
+          description: A unique identifier for the DA/Invoice. It is a string to allow for DAs and Invoices to exist in different spaces.
+          type: string
+          example: DA-123456
+          required : true
+      get:
+        is: [secured, traced, defaultErrors, securityErrors]
+        description: Get detailed information on a single DA.
+        responses: 
+          200:
+            body: 
+              schema: invoiceSchema
+              example: !include examples/invoice.example.json
+          404:
+            body:
+              schema: errorSchema
+              example: !include examples/payment-not-found.example.json
+      put:
+        is: [secured, traced, defaultErrors, securityErrors]
+        description: Used to alter the approval state of a payment or to solicit the action of the next approver.
+        body:
+          schema: approvalSchema
+          example: !include examples/approve.example.json
+        responses: 
+          200:
+            body:
+              schema: defaultSchema
+              example: !include examples/approval-response.example.json
+          404:
+            body:
+              schema: errorSchema
+              example: !include examples/payment-not-found.example.json
+          409:
+            description: Action not permitted in the payments current state. The payment is not currently in a state that allows approval/rejection/nudging. It may be that the action has already taken place or that there is no subsequent approver.
+            body:
+              schema: errorSchema
+              example: !include examples/payment-not-found.example.json
+      /paymentRecord:
+        get:
+          is: [secured, traced, defaultErrors, securityErrors]
+          description: A SWIFT Record for the payment information on a single DA.
+          responses: 
+            200:
+              body:
+                schema: paymentRecordSchema
+                example: !include examples/payment-record.example.json
+            404:
+              body:
+                schema: errorSchema
+                example: !include examples/payment-not-found.example.json
+            
+/operators/{operatorId}:
+  /paymentCurrencies:
+    get: 
+      is: [secured, traced, defaultErrors, securityErrors]
+      description: The possible currencies for the operator
+      responses: 
+        200:
+          body:
+            schema: currenciesSchema
+            example: !include examples/currencies.example.json
+  
+  /paymentCurrencies/{sourceCurrency}/exchange:
+    uriParameters:
+      sourceCurrency:
+        description: The currency from which you would like exchange rates to be calculated
+        type: string
+        example: INR
+    get:
+      is: [secured, traced, defaultErrors, securityErrors]
+      description: Obtain a list of permitted currencies for the identified
+      responses: 
+        200:
+          body:
+            schema: currenciesExchangeSchema
+            example: !include examples/currencies-exchange.example.json
+        404:
+          body:
+            schema: errorSchema
+            example: !include examples/currency-not-found.example.json
+
+  /paymentCurrencies/{sourceCurrency}/exchange/{toCurrency}:
+    get:
+      is: [secured, traced, defaultErrors, securityErrors]
+      description: Obtain a list of permitted currencies for the identified
+      responses: 
+        200:
+          body:
+            schema: currencyExchangeSchema
+            example: !include examples/currency-exchange.example.json
+        404:
+          body:
+            schema: errorSchema
+            example: !include examples/currency-not-found.example.json
+
